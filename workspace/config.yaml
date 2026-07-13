@@ -1,0 +1,12 @@
+# 默认模型：DeepSeek Chat（原生 DeepSeek Provider）
+# - key 从环境变量 DEEPSEEK_API_KEY 读取（不写入此文件，随源码走的只有结构）
+# - base_url 使用项目内 deepseek provider 默认端点
+model:
+  provider: deepseek
+  default: deepseek-chat
+  base_url: https://api.deepseek.com/v1
+platforms:
+  api_server:
+    port: 8642
+    enabled: true
+mcp_servers: {}
