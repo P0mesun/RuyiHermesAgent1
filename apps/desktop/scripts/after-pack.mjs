@@ -21,21 +21,42 @@
 
 import path from 'node:path'
 
+import { bundlePythonBackend } from './bundle-python-backend.mjs'
 import { stampExeIdentity } from './set-exe-identity.mjs'
 
 export default async function afterPack(context) {
-  if (context.electronPlatformName !== 'win32') {
-    return
+  // ---- macOS / Linux: bundle Python backend into Resources ----
+  const platform = context.electronPlatformName
+  const isWindows = platform === 'win32'
+
+  if (!isWindows) {
+    // On macOS / Linux, the app bundle lives at <appOutDir>/<productName>.app.
+    // The bundled Python backend goes inside the .app's Resources so it ships
+    // with the app and is self-contained on any machine with python3.
+    const productName = context.packager?.appInfo?.productFilename || 'Hermes'
+    const appBundle = platform === 'darwin'
+      ? path.join(context.appOutDir, `${productName}.app`)
+      : context.appOutDir
+    const resourcesDir = path.join(appBundle, 'Contents', 'Resources')
+    try {
+      await bundlePythonBackend(resourcesDir)
+    } catch (err) {
+      // Non-fatal: the app can still fall back to HERMES_DESKTOP_HERMES_ROOT
+      // or a system-level Hermes install.
+      console.warn(`[after-pack] Python backend bundling failed (${err.message}); app will use external Hermes`)
+    }
   }
 
-  const productName = context.packager?.appInfo?.productFilename || 'Hermes'
-  const exe = path.join(context.appOutDir, `${productName}.exe`)
-  const desktopRoot = path.resolve(import.meta.dirname, '..')
+  // ---- Windows: stamp exe identity ----
+  if (isWindows) {
+    const productName = context.packager?.appInfo?.productFilename || 'Hermes'
+    const exe = path.join(context.appOutDir, `${productName}.exe`)
 
-  try {
-    await stampExeIdentity(exe, desktopRoot)
-  } catch (err) {
-    // Never fail the build over a cosmetic stamp.
-    console.warn(`[after-pack] exe identity stamp failed (${err.message}); Hermes.exe keeps the stock Electron icon`)
+    try {
+      await stampExeIdentity(exe, path.resolve(import.meta.dirname, '..'))
+    } catch (err) {
+      // Never fail the build over a cosmetic stamp.
+      console.warn(`[after-pack] exe identity stamp failed (${err.message}); Hermes.exe keeps the stock Electron icon`)
+    }
   }
 }

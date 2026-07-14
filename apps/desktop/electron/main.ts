@@ -3308,6 +3308,27 @@ function createPythonBackend(root, label, backendArgs, options: any = {}) {
     return null
   }
 
+  // Bundled backends ship their own vendor/ dir with all deps pre-installed.
+  // Use the vendor/ site-packages instead of looking for a venv.
+  if (options.bundled) {
+    const vendorDir = path.join(root, 'vendor')
+
+    return {
+      kind: 'python',
+      label,
+      command: python,
+      args: ['-m', 'hermes_cli.main', ...backendArgs],
+      env: buildDesktopBackendEnv({
+        hermesHome: HERMES_HOME,
+        pythonPathEntries: [root, ...getVenvSitePackagesEntries(vendorDir)],
+        venvRoot: vendorDir
+      }),
+      root,
+      bootstrap: false,
+      shell: false
+    }
+  }
+
   const venvRoot = path.join(root, 'venv')
   const venvPython = getVenvPython(venvRoot)
   const command = IS_WINDOWS && fileExists(venvPython) ? venvPython : python
@@ -3374,6 +3395,25 @@ function resolveHermesBackend(backendArgs) {
 
     if (backend) {
       return backend
+    }
+  }
+
+  // 2.5 Bundled backend -- packaged apps may ship a self-contained Python
+  //     backend inside Resources/hermes-python/. Check it before falling
+  //     through to the global install / bootstrap paths.
+  if (IS_PACKAGED) {
+    const bundledRoot = path.join(process.resourcesPath, 'hermes-python')
+
+    if (isHermesSourceRoot(bundledRoot)) {
+      const backend = createPythonBackend(bundledRoot, 'bundled Hermes backend', backendArgs, {
+        // The bundled backend ships its own vendor/ dir with all deps.
+        // Tell createPythonBackend to prefer it over a system venv.
+        bundled: true
+      })
+
+      if (backend) {
+        return backend
+      }
     }
   }
 
